@@ -3,7 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
-import { Download, CheckCircle, Clock, Search, Send, ShieldAlert, X, DollarSign, Calendar, FileText as FileIcon, Layers, Info } from 'lucide-react';
+import { 
+  Download, CheckCircle, Clock, Search, Send, ShieldAlert, X, 
+  DollarSign, Calendar, FileText as FileIcon, Layers, Info, 
+  LogOut, Home, MapPin, Phone 
+} from 'lucide-react';
+import Link from 'next/link';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -15,17 +20,18 @@ export default function AdminRequestsPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [adminId, setAdminId] = useState<string | null>(null);
 
-  // --- MODAL STATE'LERİ ---
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   
-  // Teklif Formu State'leri
   const [price, setPrice] = useState('');
   const [printDate, setPrintDate] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Geçmiş tarih seçilmesini engellemek için bugünün tarihi
+  const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     checkAdminAndFetchData();
@@ -44,19 +50,13 @@ export default function AdminRequestsPage() {
   };
 
   const fetchRequests = async () => {
-    // YENİ: quotes (teklifler) tablosunu da çekiyoruz ki detayda görebilelim
     const { data } = await supabase
       .from('print_requests')
-      .select(`
-        *, 
-        files ( id, storage_path, filename, filesize ),
-        quotes (*) 
-      `)
+      .select(`*, files ( id, storage_path, filename, filesize ), quotes (*), orders (*)`)
       .order('created_at', { ascending: false });
     if (data) setRequests(data);
   };
 
-  // YENİ: Güvenli API üzerinden dosya indirme
   const downloadFile = async (storagePath: string) => {
     try {
       const res = await fetch('/api/download', {
@@ -64,11 +64,8 @@ export default function AdminRequestsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storagePath })
       });
-      
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      
-      // Gelen güvenli linki yeni sekmede aç
       window.open(data.signedUrl, '_blank');
     } catch (err: any) {
       alert("Dosya indirilemedi: " + err.message);
@@ -86,25 +83,65 @@ export default function AdminRequestsPage() {
     setIsDetailModalOpen(true);
   };
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    document.cookie = "sb-access-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    router.push('/auth/login');
+  };
+
+  const updateStatus = async (id: string, newStatus: string) => {
+    try {
+      const { error } = await supabase.from('print_requests').update({ status: newStatus }).eq('id', id);
+      if (error) throw error;
+      fetchRequests();
+      setIsDetailModalOpen(false);
+    } catch (err: any) {
+      alert("Durum güncellenirken hata: " + err.message);
+    }
+  };
+
   const handleQuoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRequest || !adminId) return;
-    setIsSubmitting(true);
+    
+    // Güvenlik: Negatif fiyat engeli
+    if (parseFloat(price) < 0) {
+      alert("Fiyat 0'dan küçük olamaz!");
+      return;
+    }
 
+    setIsSubmitting(true);
     try {
+      // 1. Teklifi veritabanına ekle
       const { error: quoteError } = await supabase.from('quotes').insert({
-        request_id: selectedRequest.id,
-        admin_id: adminId,
-        price: parseFloat(price),
-        estimated_print_date: printDate,
-        estimated_delivery_date: deliveryDate,
-        notes: notes
+        request_id: selectedRequest.id, admin_id: adminId, price: parseFloat(price),
+        estimated_print_date: printDate, estimated_delivery_date: deliveryDate, notes: notes
       });
       if (quoteError) throw quoteError;
-
+      
+      // 2. Talebin durumunu güncelle
       const { error: updateError } = await supabase.from('print_requests').update({ status: 'quoted' }).eq('id', selectedRequest.id);
       if (updateError) throw updateError;
-
+      
+      // 3. E-POSTA GÖNDERİMİ (RESEND)
+     try {
+        await fetch('/api/email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: selectedRequest.user_id, // Sadece ID'yi yolluyoruz, e-postayı arka plan bulacak!
+            subject: 'PrintCraft 3D: Projeniz İçin Yeni Bir Teklifiniz Var! 🚀',
+            type: 'quote_ready',
+            data: {
+              projectName: selectedRequest.title,
+              price: price
+            }
+          })
+        });
+      } catch (mailErr) {
+        console.error("Mail gönderilemedi, ama teklif oluşturuldu.", mailErr);
+      }
+      
       setIsQuoteModalOpen(false);
       fetchRequests();
     } catch (error: any) {
@@ -126,6 +163,8 @@ export default function AdminRequestsPage() {
     );
   }
 
+  const orderDetails = selectedRequest?.orders && selectedRequest.orders.length > 0 ? selectedRequest.orders[0] : null;
+
   return (
     <div className="min-h-screen bg-[#0d1117] text-slate-200 font-sans p-6 lg:p-10 relative">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -136,6 +175,17 @@ export default function AdminRequestsPage() {
               <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded uppercase tracking-widest font-bold">Admin</span>
               Gelen Talepler
             </h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link href="/admin" className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-sm font-medium transition-colors">
+              Özet Analiz
+            </Link>
+            <button onClick={() => router.push('/dashboard')} className="flex items-center gap-2 px-4 py-2 bg-[#1a2233] hover:bg-slate-800 rounded-lg text-sm text-slate-300 transition-colors">
+              <Home size={16} /> Müşteri Paneli
+            </button>
+            <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-lg text-sm transition-colors">
+              <LogOut size={16} /> Çıkış
+            </button>
           </div>
         </header>
 
@@ -170,6 +220,9 @@ export default function AdminRequestsPage() {
                         {req.status === 'quoted' && <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-medium flex items-center gap-1 w-max"><CheckCircle size={12}/> Teklif Verildi</span>}
                         {req.status === 'approved' && <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium flex items-center gap-1 w-max"><CheckCircle size={12}/> Onaylandı</span>}
                         {req.status === 'rejected' && <span className="px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-medium flex items-center gap-1 w-max"><CheckCircle size={12}/> Reddedildi</span>}
+                        {req.status === 'printing' && <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-medium flex items-center gap-1 w-max"><Layers size={12}/> Üretimde</span>}
+                        {req.status === 'shipped' && <span className="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-medium flex items-center gap-1 w-max"><Send size={12}/> Kargolandı</span>}
+                        {req.status === 'completed' && <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium flex items-center gap-1 w-max"><CheckCircle size={12}/> Tamamlandı</span>}
                       </td>
                       <td className="p-4 text-right">
                         {req.status === 'pending' ? (
@@ -178,7 +231,7 @@ export default function AdminRequestsPage() {
                           </button>
                         ) : (
                           <button onClick={() => openDetailModal(req)} className="text-blue-400 hover:text-blue-300 transition-colors underline text-xs font-medium cursor-pointer">
-                            Detayı Gör
+                            Detayı Gör & Yönet
                           </button>
                         )}
                       </td>
@@ -191,7 +244,7 @@ export default function AdminRequestsPage() {
         </div>
       </div>
 
-      {/* --- 1. TEKLİF VERME MODALI --- */}
+      {/* --- TEKLİF VERME MODALI --- */}
       {isQuoteModalOpen && selectedRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-[#121824] border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
@@ -200,81 +253,119 @@ export default function AdminRequestsPage() {
               <button onClick={() => setIsQuoteModalOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={24} /></button>
             </div>
             <form onSubmit={handleQuoteSubmit} className="p-6 space-y-5 overflow-y-auto">
-              {/* Form alanları bir öncekiyle aynı... */}
+              
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-300 flex items-center gap-2"><DollarSign size={16} className="text-emerald-400"/> Fiyat (TL)</label>
-                <input type="number" required value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Örn: 1500" className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-white focus:ring-2 focus:ring-blue-500/50 outline-none" />
+                <input type="number" min="0" step="0.01" required value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Örn: 1500" className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-white focus:ring-2 focus:ring-blue-500/50 outline-none" />
               </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-300 flex items-center gap-2"><Calendar size={16} className="text-blue-400"/> Üretime Başlama</label>
-                  <input type="date" required value={printDate} onChange={(e) => setPrintDate(e.target.value)} className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-slate-300 outline-none" />
+                  <input type="date" min={today} required value={printDate} onChange={(e) => setPrintDate(e.target.value)} className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-slate-300 outline-none" />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-300 flex items-center gap-2"><Calendar size={16} className="text-blue-400"/> Tahmini Teslim</label>
-                  <input type="date" required value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-slate-300 outline-none" />
+                  <input type="date" min={printDate || today} required value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-slate-300 outline-none" />
                 </div>
               </div>
+
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-300 flex items-center gap-2"><FileIcon size={16} className="text-amber-400"/> Müşteriye Not (Opsiyonel)</label>
                 <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-white outline-none resize-none" />
               </div>
+
               <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setIsQuoteModalOpen(false)} className="flex-1 border border-slate-700 hover:bg-slate-800 text-white py-3 rounded-lg">İptal</button>
-                <button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg">{isSubmitting ? 'Gönderiliyor...' : 'Teklifi Gönder'}</button>
+                <button type="button" onClick={() => setIsQuoteModalOpen(false)} className="flex-1 border border-slate-700 hover:bg-slate-800 text-white py-3 rounded-lg transition-colors">İptal</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg transition-colors">{isSubmitting ? 'Gönderiliyor...' : 'Teklifi Gönder'}</button>
               </div>
+
             </form>
           </div>
         </div>
       )}
 
-      {/* --- 2. DETAY GÖSTERME MODALI --- */}
+      {/* --- DETAY VE YÖNETİM MODALI --- */}
       {isDetailModalOpen && selectedRequest && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#121824] border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+          <div className="bg-[#121824] border border-slate-700 w-full max-w-lg rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
             
-            <div className="flex justify-between items-center p-6 border-b border-slate-800/60 bg-[#1a2233]">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2"><Info className="text-blue-400"/> Sipariş Detayları</h2>
+            <div className="flex justify-between items-center p-6 border-b border-slate-800/60 bg-[#1a2233] shrink-0 rounded-t-2xl">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2"><Info className="text-blue-400"/> Sipariş Yönetimi</h2>
               <button onClick={() => setIsDetailModalOpen(false)} className="text-slate-400 hover:text-white"><X size={24} /></button>
             </div>
 
-            <div className="p-6 space-y-6">
-              {/* Kullanıcı Notu ve Açıklamalar */}
-              <div>
-                <h3 className="text-sm font-semibold text-slate-400 mb-2">Proje Bilgileri</h3>
-                <div className="bg-[#1a2233] border border-slate-700 rounded-lg p-4 space-y-2">
-                  <p><span className="text-slate-500">Proje Adı:</span> <span className="text-white font-medium">{selectedRequest.title}</span></p>
-                  <p><span className="text-slate-500">Açıklama:</span> <span className="text-slate-300">{selectedRequest.description || "Açıklama girilmemiş."}</span></p>
-                  <div className="pt-2 flex gap-4 border-t border-slate-700/50 mt-2">
-                    <p><span className="text-slate-500">Materyal:</span> <span className="text-white">{selectedRequest.material}</span></p>
-                    <p><span className="text-slate-500">Adet:</span> <span className="text-white">{selectedRequest.quantity}</span></p>
+            <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+              
+              {/* Teslimat Bilgileri (Müşteri Onayladıysa Görünür) */}
+              {orderDetails && (
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-2"><MapPin size={16} className="text-amber-400"/> Teslimat Bilgileri</h3>
+                  <div className="bg-[#1a2233] border border-slate-700 rounded-lg p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <MapPin size={18} className="text-slate-500 mt-0.5 shrink-0" />
+                      <p className="text-white text-sm whitespace-pre-line">{orderDetails.shipping_address}</p>
+                    </div>
+                    <div className="flex items-center gap-3 pt-3 border-t border-slate-700/50">
+                      <Phone size={18} className="text-slate-500 shrink-0" />
+                      <p className="text-white text-sm font-medium">{orderDetails.contact_phone}</p>
+                    </div>
                   </div>
+                </div>
+              )}
+
+              {/* Proje Bilgileri */}
+              <div>
+                <h3 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-2"><FileIcon size={16} className="text-blue-400"/> Proje Bilgileri</h3>
+                <div className="bg-[#1a2233] border border-slate-700 rounded-lg p-4 space-y-2 text-sm">
+                  <p className="flex justify-between"><span className="text-slate-500">Proje Adı:</span> <span className="text-white font-medium">{selectedRequest.title}</span></p>
+                  <div className="pt-2 flex justify-between border-t border-slate-700/50 mt-2">
+                    <p><span className="text-slate-500">Materyal:</span> <span className="text-white ml-1">{selectedRequest.material}</span></p>
+                    <p><span className="text-slate-500">Adet:</span> <span className="text-white ml-1">{selectedRequest.quantity}</span></p>
+                  </div>
+                  {selectedRequest.description && (
+                    <div className="pt-3 border-t border-slate-700/50 mt-2">
+                      <span className="text-slate-500 block mb-1">Müşteri Açıklaması:</span>
+                      <span className="text-slate-300">{selectedRequest.description}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Eğer Teklif Verildiyse Göster */}
+              {/* Verilen Teklif */}
               {selectedRequest.quotes && selectedRequest.quotes.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-400 mb-2">Verilen Teklif</h3>
-                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4 space-y-2">
+                  <h3 className="text-sm font-semibold text-slate-400 mb-2 flex items-center gap-2"><DollarSign size={16} className="text-emerald-400"/> Verilen Teklif</h3>
+                  <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-4 space-y-2 text-sm">
                     <p className="flex justify-between"><span className="text-slate-400">Fiyat:</span> <span className="text-emerald-400 font-bold text-lg">₺{selectedRequest.quotes[0].price}</span></p>
                     <p className="flex justify-between"><span className="text-slate-400">Üretime Başlama:</span> <span className="text-white">{new Date(selectedRequest.quotes[0].estimated_print_date).toLocaleDateString('tr-TR')}</span></p>
                     <p className="flex justify-between"><span className="text-slate-400">Teslim Tarihi:</span> <span className="text-white">{new Date(selectedRequest.quotes[0].estimated_delivery_date).toLocaleDateString('tr-TR')}</span></p>
-                    {selectedRequest.quotes[0].notes && (
-                      <div className="mt-3 pt-3 border-t border-emerald-500/10">
-                        <span className="text-slate-500 text-xs">Admin Notu:</span>
-                        <p className="text-sm text-slate-300 mt-1">{selectedRequest.quotes[0].notes}</p>
-                      </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sipariş Durumunu İlerletme Butonları */}
+              {['approved', 'printing', 'shipped'].includes(selectedRequest.status) && (
+                <div className="mt-4 pt-4 border-t border-slate-700/50">
+                  <h3 className="text-sm font-semibold text-slate-400 mb-3">Siparişi İlerlet</h3>
+                  <div className="flex gap-2">
+                    {selectedRequest.status === 'approved' && (
+                      <button onClick={() => updateStatus(selectedRequest.id, 'printing')} className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-3 rounded-lg text-sm font-medium transition-colors">Üretime Başla</button>
+                    )}
+                    {selectedRequest.status === 'printing' && (
+                      <button onClick={() => updateStatus(selectedRequest.id, 'shipped')} className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white py-3 rounded-lg text-sm font-medium transition-colors">Kargoya Ver</button>
+                    )}
+                    {selectedRequest.status === 'shipped' && (
+                      <button onClick={() => updateStatus(selectedRequest.id, 'completed')} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white py-3 rounded-lg text-sm font-medium transition-colors">Tamamlandı İşaretle</button>
                     )}
                   </div>
                 </div>
               )}
 
-              <button onClick={() => setIsDetailModalOpen(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg py-3 transition-colors">
+              <button onClick={() => setIsDetailModalOpen(false)} className="w-full bg-slate-800 hover:bg-slate-700 text-white font-medium rounded-lg py-3 transition-colors mt-2">
                 Kapat
               </button>
             </div>
-
           </div>
         </div>
       )}

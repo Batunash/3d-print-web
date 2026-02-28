@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Box, FileBox, Clock, Settings, LogOut, Menu, X, DollarSign, FileText, Plus, ChevronRight, CheckCircle, AlertCircle } from 'lucide-react';
+import { Box, FileBox, Clock, LogOut, Menu, X, FileText, Plus, ChevronRight,Settings } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -17,28 +17,22 @@ export default function DashboardPage() {
   const [requests, setRequests] = useState<any[]>([]);
   const [loadingReqs, setLoadingReqs] = useState(true);
 
-  // --- MODAL STATE'LERİ ---
-  const [selectedQuote, setSelectedQuote] = useState<any>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-
+  // Sayfa yüklendiğinde sadece "Son 5" siparişi çekiyoruz (Özet paneli olduğu için)
   useEffect(() => {
-    fetchRequests();
+    const fetchLatestRequests = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from('print_requests')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(5); // Sadece son 5 kayıt
+        if (data) setRequests(data);
+      }
+      setLoadingReqs(false);
+    };
+    fetchLatestRequests();
   }, []);
-
-  const fetchRequests = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      // Siparişleri ve bağlı olan "teklifleri" (quotes) beraber çekiyoruz
-      const { data } = await supabase
-        .from('print_requests')
-        .select('*, quotes(*)')
-        .order('created_at', { ascending: false })
-        .limit(10);
-      if (data) setRequests(data);
-    }
-    setLoadingReqs(false);
-  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -46,75 +40,15 @@ export default function DashboardPage() {
     router.push('/auth/login');
   };
 
-  // Teklif İnceleme Modalını Aç
-  const openQuoteModal = (req: any) => {
-    if (req.quotes && req.quotes.length > 0) {
-      setSelectedQuote({ ...req.quotes[0], request: req });
-      setIsModalOpen(true);
-    }
-  };
-
-  // Teklifi Onayla ve Siparişe Dönüştür
-  const handleApproveQuote = async () => {
-    if (!selectedQuote) return;
-    setIsProcessing(true);
-
-    try {
-      // 1. Durumu Approved yap
-      const { error: reqError } = await supabase
-        .from('print_requests')
-        .update({ status: 'approved' })
-        .eq('id', selectedQuote.request_id);
-      
-      if (reqError) throw reqError;
-
-      // 2. Orders tablosuna yeni siparişi ekle
-      const { error: orderError } = await supabase
-        .from('orders')
-        .insert({
-          request_id: selectedQuote.request_id,
-          // Fatura numarası için basit bir rastgele kod üretiyoruz
-          invoice_number: `INV-${Math.floor(Math.random() * 1000000)}` 
-        });
-
-      if (orderError) throw orderError;
-
-      alert("Harika! Teklifi onayladınız ve siparişiniz üretime alındı.");
-      setIsModalOpen(false);
-      fetchRequests(); // Listeyi yenile
-
-    } catch (error: any) {
-      alert("İşlem sırasında bir hata oluştu: " + error.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Teklifi Reddet (İsteğe bağlı iptal süreci)
-  const handleRejectQuote = async () => {
-    if (!selectedQuote) return;
-    const confirmReject = window.confirm("Bu teklifi reddetmek istediğinize emin misiniz? İşlem geri alınamaz.");
-    if (!confirmReject) return;
-
-    setIsProcessing(true);
-    try {
-      await supabase.from('print_requests').update({ status: 'rejected' }).eq('id', selectedQuote.request_id);
-      setIsModalOpen(false);
-      fetchRequests();
-    } catch (error: any) {
-      alert("Hata: " + error.message);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  // Rozet fonksiyonu
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending': return <span className="px-3 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-medium">İnceleniyor</span>;
       case 'quoted': return <span className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-medium animate-pulse">Teklif Bekliyor</span>;
       case 'approved': return <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium">Onaylandı</span>;
       case 'rejected': return <span className="px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-medium">Reddedildi</span>;
+      case 'printing': return <span className="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-medium">Üretimde</span>;
+      case 'shipped': return <span className="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-medium">Kargoya Verildi</span>;
+      case 'completed': return <span className="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-medium">Tamamlandı</span>;
       default: return <span className="px-3 py-1 rounded-full bg-slate-500/10 text-slate-400 border border-slate-500/20 text-xs font-medium">{status}</span>;
     }
   };
@@ -134,12 +68,14 @@ export default function DashboardPage() {
             </div>
           </Link>
           <nav className="p-4 space-y-2">
-            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 rounded-lg font-medium border border-blue-500/20"><FileBox size={20} /> Özet Paneli</Link>
-            <Link href="/dashboard/new-request" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#1a2233] rounded-lg font-medium"><Plus size={20} /> Yeni Talep</Link>
+            <Link href="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 rounded-lg font-medium border border-blue-500/20"><Box size={20} /> Özet Paneli</Link>
+            <Link href="/dashboard/orders" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#1a2233] rounded-lg font-medium transition-colors"><FileBox size={20} /> Tüm Siparişler</Link>
+            <Link href="/dashboard/new-request" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#1a2233] rounded-lg font-medium transition-colors"><Plus size={20} /> Yeni Talep</Link>
+            <Link href="/dashboard/settings" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#1a2233] rounded-lg font-medium transition-colors"><Settings size={20} /> Ayarlar</Link>
           </nav>
         </div>
         <div className="p-4 border-t border-slate-800/60">
-          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 w-full text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg font-medium"><LogOut size={20} /> Çıkış Yap</button>
+          <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-3 w-full text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg font-medium transition-colors"><LogOut size={20} /> Çıkış Yap</button>
         </div>
       </aside>
 
@@ -148,24 +84,29 @@ export default function DashboardPage() {
         <div className="max-w-5xl mx-auto space-y-8">
           
           <header>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Kontrol Paneli</h1>
-            <p className="text-slate-400 mt-2">Siparişlerinizi ve güncel tekliflerinizi buradan takip edebilirsiniz.</p>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Hoş Geldiniz</h1>
+            <p className="text-slate-400 mt-2">Siparişlerinizin genel durumunu buradan takip edebilirsiniz.</p>
           </header>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-[#121824] border border-slate-800/60 p-5 rounded-xl flex items-center gap-4">
-              <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center text-blue-400"><FileBox size={24} /></div>
-              <div><p className="text-sm text-slate-400 font-medium">Toplam Talep</p><p className="text-2xl font-bold text-white">{requests.length}</p></div>
+          {/* ÇAĞRI (CTA) AFİŞİ */}
+          <div className="bg-gradient-to-r from-blue-900/40 to-[#121824] border border-blue-500/30 rounded-2xl p-8 lg:p-10 flex flex-col sm:flex-row items-center justify-between gap-6 relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+            <div className="relative z-10 text-center sm:text-left">
+              <h2 className="text-2xl font-bold text-white mb-2">Yeni Bir Projeye Başlayın</h2>
+              <p className="text-slate-400 max-w-lg">3D modelinizi yükleyin, malzeme tercihlerinizi belirleyin ve anında üretim sürecini başlatalım.</p>
             </div>
-            <div className="bg-[#121824] border border-slate-800/60 p-5 rounded-xl flex items-center gap-4">
-              <div className="w-12 h-12 bg-amber-500/10 rounded-lg flex items-center justify-center text-amber-400"><Clock size={24} /></div>
-              <div><p className="text-sm text-slate-400 font-medium">Bekleyen Teklifler</p><p className="text-2xl font-bold text-white">{requests.filter(r => r.status === 'quoted').length}</p></div>
-            </div>
+            <Link href="/dashboard/new-request" className="relative z-10 shrink-0 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-xl font-medium transition-all shadow-lg shadow-blue-600/20 flex items-center gap-2">
+              <Plus size={20} /> Yeni Talep Oluştur
+            </Link>
           </div>
 
-          <div className="bg-[#121824] border border-slate-800/60 rounded-xl overflow-hidden">
+          {/* SON SİPARİŞLER TABLOSU */}
+          <div className="bg-[#121824] border border-slate-800/60 rounded-xl overflow-hidden shadow-xl">
             <div className="p-6 border-b border-slate-800/60 flex justify-between items-center">
-              <h2 className="text-lg font-bold text-white">Siparişlerim & Taleplerim</h2>
+              <h2 className="text-lg font-bold text-white">Son Etkinlikler</h2>
+              <Link href="/dashboard/orders" className="text-sm text-blue-400 hover:text-blue-300 font-medium transition-colors">
+                Tümünü Gör
+              </Link>
             </div>
             
             {loadingReqs ? (
@@ -183,7 +124,6 @@ export default function DashboardPage() {
                     <tr className="bg-[#1a2233] text-slate-400 text-xs uppercase tracking-wider">
                       <th className="p-4 font-medium">Proje Adı</th>
                       <th className="p-4 font-medium">Tarih</th>
-                      <th className="p-4 font-medium">Malzeme / Adet</th>
                       <th className="p-4 font-medium">Durum</th>
                       <th className="p-4 font-medium text-right">İşlem</th>
                     </tr>
@@ -193,16 +133,11 @@ export default function DashboardPage() {
                       <tr key={req.id} className="hover:bg-[#1a2233]/50 transition-colors">
                         <td className="p-4 font-medium text-white">{req.title}</td>
                         <td className="p-4 text-slate-400">{new Date(req.created_at).toLocaleDateString('tr-TR')}</td>
-                        <td className="p-4 text-slate-400">{req.material} <span className="text-slate-600">x</span> {req.quantity}</td>
                         <td className="p-4">{getStatusBadge(req.status)}</td>
                         <td className="p-4 text-right">
-                          {req.status === 'quoted' ? (
-                            <button onClick={() => openQuoteModal(req)} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-xs font-medium shadow-lg shadow-blue-500/20 transition-all">
-                              Teklifi İncele
-                            </button>
-                          ) : (
-                            <button className="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-slate-800"><ChevronRight size={18} /></button>
-                          )}
+                          <Link href={`/dashboard/orders/${req.id}`} className="inline-flex items-center gap-1 text-slate-400 hover:text-white font-medium bg-slate-800/50 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition-colors">
+                            Detay <ChevronRight size={16} />
+                          </Link>
                         </td>
                       </tr>
                     ))}
@@ -211,66 +146,9 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
         </div>
       </main>
-
-      {/* --- MÜŞTERİ TEKLİF İNCELEME MODALI --- */}
-      {isModalOpen && selectedQuote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#121824] border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-            
-            <div className="flex justify-between items-center p-6 border-b border-slate-800/60 bg-[#1a2233]">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2"><DollarSign className="text-emerald-400"/> Teklif Detayı</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white"><X size={24} /></button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div className="text-center">
-                <p className="text-sm text-slate-400 mb-1">Toplam Tutar</p>
-                <p className="text-4xl font-bold text-white">₺{selectedQuote.price}</p>
-              </div>
-
-              <div className="bg-[#1a2233] border border-slate-700 rounded-xl p-4 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Üretime Başlama:</span>
-                  <span className="text-white font-medium">{new Date(selectedQuote.estimated_print_date).toLocaleDateString('tr-TR')}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Tahmini Teslimat:</span>
-                  <span className="text-white font-medium">{new Date(selectedQuote.estimated_delivery_date).toLocaleDateString('tr-TR')}</span>
-                </div>
-              </div>
-
-              {selectedQuote.notes && (
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex gap-3">
-                  <AlertCircle className="text-blue-400 shrink-0 mt-0.5" size={18} />
-                  <div>
-                    <p className="text-xs font-semibold text-blue-400 mb-1">Admin Notu:</p>
-                    <p className="text-sm text-slate-300 italic">{selectedQuote.notes}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-2 flex flex-col gap-3">
-                <button 
-                  onClick={handleApproveQuote} 
-                  disabled={isProcessing} 
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg py-3 transition-colors flex justify-center items-center gap-2 shadow-lg shadow-emerald-600/20 disabled:opacity-50"
-                >
-                  {isProcessing ? 'İşleniyor...' : <>Teklifi Onayla ve Üretime Başla <CheckCircle size={18} /></>}
-                </button>
-                <button 
-                  onClick={handleRejectQuote} 
-                  disabled={isProcessing} 
-                  className="w-full bg-transparent border border-slate-700 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 text-slate-400 font-medium rounded-lg py-3 transition-colors"
-                >
-                  Teklifi Reddet
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
