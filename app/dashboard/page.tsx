@@ -5,6 +5,7 @@ import { Box, FileBox, Clock, LogOut, Menu, X, FileText, Plus, ChevronRight,Sett
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import NotificationBell from '@/components/NotificationBell';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -83,9 +84,19 @@ export default function DashboardPage() {
       <main className="flex-1 p-6 lg:p-10 overflow-y-auto">
         <div className="max-w-5xl mx-auto space-y-8">
           
-          <header>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Hoş Geldiniz</h1>
-            <p className="text-slate-400 mt-2">Siparişlerinizin genel durumunu buradan takip edebilirsiniz.</p>
+          <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-white tracking-tight">Özet Paneli</h1>
+              <p className="text-slate-400 mt-2">Siparişlerinizi ve üretim süreçlerinizi buradan takip edebilirsiniz.</p>
+            </div>
+            
+            {/* BURAYA EKLENDİ */}
+            <div className="flex items-center gap-4">
+              <NotificationBell />
+              <Link href="/dashboard/new-request" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-medium transition-all shadow-lg shadow-blue-600/20 w-fit">
+                <Plus size={18} /> Yeni Talep
+              </Link>
+            </div>
           </header>
 
           {/* ÇAĞRI (CTA) AFİŞİ */}

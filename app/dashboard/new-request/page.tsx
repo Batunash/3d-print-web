@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, UploadCloud, FileText, Settings, Layers, Box, Trash2 } from 'lucide-react';
+import { ArrowLeft, UploadCloud, FileText, Settings, Layers, Box, Trash2, Palette } from 'lucide-react';
 import Link from 'next/link';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -17,25 +17,45 @@ export default function NewRequestPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   
-  // --- YENİ: Dosya UX State'leri ---
+  // Dosya UX State'leri
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   // Form State'leri
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [material, setMaterial] = useState('PLA');
   const [quantity, setQuantity] = useState(1);
+  
+  // Dinamik Veri State'leri (DB'den gelenler)
+  const [materialOptions, setMaterialOptions] = useState<any[]>([]);
+  const [colorOptions, setColorOptions] = useState<any[]>([]);
+  
+  // Seçilen Dinamik Veriler
+  const [selectedMaterial, setSelectedMaterial] = useState('');
+  const [selectedColor, setSelectedColor] = useState('');
 
   useEffect(() => {
-    const fetchUser = async () => {
+    const fetchUserAndOptions = async () => {
+      // 1. Kullanıcıyı çek
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setUserId(user.id);
+
+      // 2. SADECE AKTİF (is_active = true) Malzeme ve Renkleri çek
+      const { data: mats } = await supabase.from('materials').select('*').eq('is_active', true).order('name');
+      const { data: cols } = await supabase.from('colors').select('*').eq('is_active', true).order('name');
+      
+      if (mats && mats.length > 0) {
+        setMaterialOptions(mats);
+        setSelectedMaterial(mats[0].name); // Varsayılan olarak ilk malzemeyi seç
+      }
+      if (cols && cols.length > 0) {
+        setColorOptions(cols);
+        setSelectedColor(cols[0].name); // Varsayılan olarak ilk rengi seç
+      }
     };
-    fetchUser();
+    fetchUserAndOptions();
   }, []);
 
-  // --- YENİ: Sürükle-Bırak UX Fonksiyonları ---
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -55,7 +75,7 @@ export default function NewRequestPage() {
   };
   const removeFile = () => {
     setFile(null);
-    setUploadProgress(0); // Dosya silinince progress'i sıfırla
+    setUploadProgress(0); 
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -71,20 +91,26 @@ export default function NewRequestPage() {
     setError(null);
     setUploadProgress(0);
 
-    // Hata durumunda silmek için ID'yi hafızada tutacağımız değişken
     let createdRequestId: string | null = null; 
 
     try {
-      // 1. ÖNCE TALEBİ OLUŞTUR
+      // 1. ÖNCE TALEBİ OLUŞTUR (Yeni 'color' sütunu ile birlikte)
       const { data: requestData, error: requestError } = await supabase
         .from("print_requests")
-        .insert({ user_id: userId, title, description, material, quantity })
+        .insert({ 
+          user_id: userId, 
+          title, 
+          description, 
+          material: selectedMaterial, 
+          color: selectedColor, 
+          quantity 
+        })
         .select()
         .single();
 
       if (requestError) throw new Error(requestError.message);
       
-      createdRequestId = requestData.id; // ID'yi hafızaya al
+      createdRequestId = requestData.id;
 
       // 2. SIGNED URL AL
       const uploadApiRes = await fetch("/api/upload", {
@@ -102,7 +128,6 @@ export default function NewRequestPage() {
         xhr.open("PUT", uploadUrl, true);
         xhr.setRequestHeader("Content-Type", file.type);
 
-        // İlerleme anlık olarak buraya düşer
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) {
             const percentComplete = Math.round((event.loaded / event.total) * 100);
@@ -119,7 +144,6 @@ export default function NewRequestPage() {
         };
 
         xhr.onerror = () => reject(new Error("Yükleme sırasında ağ hatası oluştu."));
-        
         xhr.send(file);
       });
 
@@ -143,12 +167,9 @@ export default function NewRequestPage() {
       router.push('/dashboard');
       
     } catch (err: any) {
-      // 🚨 ROLLBACK (GERİ ALMA) İŞLEMİ 🚨
-      // Eğer bir hata olduysa ve talep DB'de oluşmuşsa, o içi boş talebi sil
       if (createdRequestId) {
         await supabase.from("print_requests").delete().eq("id", createdRequestId);
       }
-      
       setError(err.message || "Yükleme sırasında bir hata oluştu.");
       setLoading(false);
       setUploadProgress(0);
@@ -179,14 +200,13 @@ export default function NewRequestPage() {
 
           <form onSubmit={handleCreate} className="space-y-8">
             
-            {/* --- DOSYA YÜKLEME ALANI UX --- */}
+            {/* DOSYA YÜKLEME ALANI */}
             <div className="space-y-3">
               <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                 <Box size={16} className="text-blue-400"/> 3D Model Dosyası
               </label>
               
               {!file ? (
-                // Dosya Seçilmediyse: Sürükle Bırak Alanı
                 <div 
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -202,7 +222,6 @@ export default function NewRequestPage() {
                   <p className="text-xs text-slate-500 mt-2">Maksimum 50MB (.stl,.obj,.3mf,.step,.stp,.iges,.igs,.blend,.f3d)</p>
                 </div>
               ) : (
-                // Dosya Seçildiyse: Seçilen Dosya Kartı
                 <div className="bg-[#1a2233] border border-blue-500/30 rounded-xl p-4 flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center text-blue-400">
@@ -220,10 +239,8 @@ export default function NewRequestPage() {
               )}
             </div>
 
-            {/* Yatay Ayırıcı Çizgi */}
             <hr className="border-slate-800/60" />
 
-            {/* Proje Adı */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                 <FileText size={16} className="text-blue-400"/> Proje Adı
@@ -231,7 +248,6 @@ export default function NewRequestPage() {
               <input type="text" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Örn: Drone Pervane Koruyucu" className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
             </div>
 
-            {/* Açıklama */}
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                 <Layers size={16} className="text-blue-400"/> Açıklama & Notlar
@@ -239,16 +255,38 @@ export default function NewRequestPage() {
               <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Baskı yönü, doluluk oranı gibi özel isteklerinizi buraya yazabilirsiniz..." className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none" />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {/* Materyal Seçimi */}
+            {/* DİNAMİK ALANLAR (Malzeme, Renk, Adet) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              
+              {/* Dinamik Malzeme */}
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                   <Settings size={16} className="text-blue-400"/> Malzeme Türü
                 </label>
-                <select value={material} onChange={(e) => setMaterial(e.target.value)} className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none">
-                  <option value="PLA">PLA (Standart, Ekonomik)</option>
-                  <option value="PETG">PETG (Dayanıklı, Esnek)</option>
-                  <option value="ABS">ABS (Isıya Dayanıklı)</option>
+                <select value={selectedMaterial} onChange={(e) => setSelectedMaterial(e.target.value)} className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none">
+                  {materialOptions.length === 0 ? (
+                    <option value="">Yükleniyor...</option>
+                  ) : (
+                    materialOptions.map(mat => (
+                      <option key={mat.id} value={mat.name}>{mat.name}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              {/* Dinamik Renk */}
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                  <Palette size={16} className="text-indigo-400"/> Baskı Rengi
+                </label>
+                <select value={selectedColor} onChange={(e) => setSelectedColor(e.target.value)} className="w-full bg-[#1a2233] border border-slate-700/60 rounded-lg py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none">
+                  {colorOptions.length === 0 ? (
+                    <option value="">Yükleniyor...</option>
+                  ) : (
+                    colorOptions.map(col => (
+                      <option key={col.id} value={col.name}>{col.name}</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -259,27 +297,22 @@ export default function NewRequestPage() {
               </div>
             </div>
 
-            {/* Gönder Butonu ve Progress Bar */}
+            {/* Gönder Butonu */}
             <div className="mt-8">
               {uploadProgress > 0 && uploadProgress < 100 ? (
-                // Yükleniyor Durumu (Progress Bar)
                 <div className="w-full bg-[#1a2233] rounded-lg p-4 border border-blue-500/30 shadow-lg">
                   <div className="flex justify-between text-xs text-slate-300 font-medium mb-2">
                     <span>Model Yükleniyor...</span>
                     <span>{uploadProgress}%</span>
                   </div>
                   <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
-                    <div 
-                      className="bg-blue-500 h-2.5 rounded-full transition-all duration-300 ease-out" 
-                      style={{ width: `${uploadProgress}%` }}
-                    ></div>
+                    <div className="bg-blue-500 h-2.5 rounded-full transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }}></div>
                   </div>
                 </div>
               ) : (
-                // Normal Buton Durumu
                 <button
                   type="submit"
-                  disabled={loading || !userId || !file}
+                  disabled={loading || !userId || !file || materialOptions.length === 0}
                   className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg py-4 flex justify-center items-center gap-2 transition-all shadow-lg shadow-blue-600/20"
                 >
                   {loading ? 'Talep İşleniyor...' : <>Talebi Kaydet <UploadCloud size={18} /></>}

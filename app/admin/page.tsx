@@ -100,8 +100,8 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen flex bg-[#0d1117] text-slate-200 font-sans">
       
-      {/* SOL MENÜ (ADMİN SİDEBAR) */}
-      <aside className="w-64 bg-[#111622] border-r border-slate-800/60 flex flex-col justify-between hidden lg:flex">
+      {/* SOL MENÜ (ADMİN SİDEBAR) - EKSİKSİZ VE TUTARLI */}
+      <aside className="w-64 bg-[#111622] border-r border-slate-800/60 flex flex-col justify-between hidden lg:flex shrink-0">
         <div>
           <div className="flex items-center gap-3 px-6 py-6 border-b border-slate-800/60">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
@@ -110,11 +110,16 @@ export default function AdminDashboard() {
             <span className="font-bold text-lg text-white">Yönetim Paneli</span>
           </div>
           <nav className="p-4 space-y-2">
-            <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 rounded-lg font-medium border border-blue-500/20">
+            {/* Aktif sekme: Özet Analiz */}
+            <Link href="/admin" className="flex items-center gap-3 px-4 py-3 bg-blue-600/10 text-blue-400 rounded-lg font-medium border border-blue-500/20 transition-colors">
               <BarChart3 size={20} /> Özet Analiz
             </Link>
             <Link href="/admin/requests" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#1a2233] rounded-lg font-medium transition-colors">
               <FileText size={20} /> Gelen Talepler
+            </Link>
+            {/* Eklenen Yeni Link */}
+            <Link href="/admin/materials" className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-[#1a2233] rounded-lg font-medium transition-colors">
+              <Layers size={20} /> Malzeme & Renkler
             </Link>
           </nav>
         </div>
