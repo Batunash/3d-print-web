@@ -1,26 +1,43 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* ARKA PLANLAR */
+  --color-background: #0d1117;
+  --color-sidebar: #111622;
+  --color-surface: #121824;
+  --color-surface-hover: #1a2233;
+  
+  /* MARKA RENKLERİ (Mavi tonları) */
+  --color-primary: #2563eb;
+  --color-primary-hover: #3b82f6;
+  
+  /* DURUM RENKLERİ */
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-info: #06b6d4;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Sitenin genel arka planını otomatik olarak buraya bağlıyoruz */
+@layer base {
+  body {
+    background-color: var(--color-background);
+    color: #e2e8f0; /* text-slate-200 */
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Kaydırma çubuğu (Scrollbar) özelleştirmeleri gibi diğer CSS kodların burada kalabilir... */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.8);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 1);
 }
