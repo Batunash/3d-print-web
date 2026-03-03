@@ -2,13 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { FileText, Plus, ChevronRight } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import NotificationBell from '@/components/NotificationBell';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 
 export default function DashboardPage() {
   const [requests, setRequests] = useState<any[]>([]);

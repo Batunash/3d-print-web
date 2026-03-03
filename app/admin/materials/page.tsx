@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import { Layers, Palette, Plus, ToggleLeft, ToggleRight, Trash2 } from 'lucide-react';
 import { SITE_CONFIG } from '@/lib/constants';
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 export default function MaterialsManagement() {
   const router = useRouter();

@@ -2,14 +2,11 @@
 
 import React, { useState } from 'react';
 import { User, Mail, Lock, CheckCircle2, RefreshCcw, X } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import PublicNavbar from '@/components/PublicNavbar';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { SITE_CONFIG } from '@/lib/constants';
+import { supabase } from '@/lib/supabaseClient'; // Merkezi Supabase İstemcisi
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -20,6 +17,8 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  
+  // Modal State'leri
   const [isTermsOpen, setIsTermsOpen] = useState(false);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
@@ -43,32 +42,43 @@ export default function RegisterPage() {
       } else {
         setIsSuccess(true);
       }
-    } catch (err: any) { setError(err.message); } finally { setLoading(false); }
+    } catch (err: any) { 
+      setError(err.message); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
+  // BAŞARILI KAYIT / E-POSTA DOĞRULAMA EKRANI
   if (isSuccess) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center font-sans">
       <div className="w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mb-6 border border-success/20">
         <Mail size={40} className="text-success" />
       </div>
       <h1 className="text-3xl font-bold text-white mb-4">E-postanızı Kontrol Edin</h1>
       <p className="text-slate-400 max-w-md mb-8"><b>{email}</b> adresine bir doğrulama bağlantısı gönderdik.</p>
-      <Link href="/auth/login" className="bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-lg font-medium transition-colors">Giriş Yap</Link>
+      <Link href="/auth/login" className="bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-lg font-medium transition-colors">
+        Giriş Yap
+      </Link>
     </div>
   );
 
+  // NORMAL KAYIT EKRANI
   return (
     <div className="min-h-screen flex flex-col bg-background text-slate-200 font-sans selection:bg-primary/30">
       <PublicNavbar />
 
       <div className="flex flex-col lg:flex-row flex-1 pt-[72px] relative">
+        {/* SOL PANEL - GÖRSEL VE MARKA */}
         <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-sidebar p-16 flex-col justify-center border-r border-slate-800/50">
           <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none"></div>
           <div className="relative z-10">
             <h1 className="text-4xl lg:text-5xl font-bold text-white leading-tight mb-6 tracking-tight">
               Hayal gücünüzü<br /><span className="text-primary">gerçeğe</span> dönüştürün.
             </h1>
-            <p className="text-slate-400 text-lg max-w-md leading-relaxed mb-12">Katmanlı üretimin yeni neslini deneyimleyin.</p>
+            <p className="text-slate-400 text-lg max-w-md leading-relaxed mb-12">
+              Katmanlı üretimin yeni neslini deneyimleyin. Modellerinizi yükleyin, malzemeleri seçin ve baskılarınızı gerçek zamanlı takip edin.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-4">
               <div className="flex items-center gap-3 text-sm font-medium text-slate-200"><CheckCircle2 size={20} className="text-primary" /> Anında Teklif</div>
               <div className="flex items-center gap-3 text-sm font-medium text-slate-200"><CheckCircle2 size={20} className="text-primary" /> Endüstriyel Kalite</div>
@@ -78,6 +88,7 @@ export default function RegisterPage() {
           </div>
         </div>
 
+        {/* SAĞ PANEL - KAYIT FORMU */}
         <div className="w-full lg:w-1/2 flex items-center justify-center p-8 sm:p-16 lg:p-20 bg-surface">
           <div className="max-w-md w-full">
             <h2 className="text-3xl font-bold text-white mb-2">Hesap Oluştur</h2>
@@ -118,7 +129,7 @@ export default function RegisterPage() {
               </div>
 
               <div className="flex items-start gap-3 pt-2">
-                <input id="terms" type="checkbox" required className="w-4 h-4 rounded border-slate-600 bg-surface-hover focus:ring-2 focus:ring-primary mt-0.5" />
+                <input id="terms" type="checkbox" required className="w-4 h-4 rounded border-slate-600 bg-surface-hover focus:ring-2 focus:ring-primary mt-0.5 cursor-pointer" />
                 <label htmlFor="terms" className="text-xs text-slate-400">
                   <button type="button" onClick={() => setIsTermsOpen(true)} className="text-primary hover:underline">Hizmet Şartları</button>'nı ve <button type="button" onClick={() => setIsPrivacyOpen(true)} className="text-primary hover:underline">Gizlilik Politikası</button>'nı kabul ediyorum.
                 </label>
@@ -136,36 +147,41 @@ export default function RegisterPage() {
         </div>
       </div>
 
-      {/* MODALLAR */}
+      {/* --- HİZMET ŞARTLARI MODALI --- */}
       {isTermsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-surface border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[80vh]">
             <div className="flex justify-between items-center p-6 border-b border-slate-800/60 bg-surface-hover rounded-t-2xl shrink-0">
               <h2 className="text-xl font-bold text-white">Hizmet Şartları</h2>
-              <button onClick={() => setIsTermsOpen(false)} className="text-slate-400 hover:text-white"><X size={24} /></button>
+              <button onClick={() => setIsTermsOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={24} /></button>
             </div>
-            <div className="p-6 overflow-y-auto text-sm text-slate-300 space-y-4">
-              <p>Örnek hizmet şartları metni.</p>
+            <div className="p-6 overflow-y-auto text-sm text-slate-300 space-y-4 custom-scrollbar">
+              {SITE_CONFIG.legal.termsOfService.map((term, index) => (
+                <p key={index}>{term}</p>
+              ))}
             </div>
             <div className="p-6 border-t border-slate-800/60 bg-surface-hover rounded-b-2xl shrink-0">
-              <button onClick={() => setIsTermsOpen(false)} className="w-full bg-primary hover:bg-primary-hover text-white font-medium py-3 rounded-xl">Okudum, Kapat</button>
+              <button onClick={() => setIsTermsOpen(false)} className="w-full bg-primary hover:bg-primary-hover text-white font-medium py-3 rounded-xl transition-colors">Okudum, Kabul Ediyorum</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* --- GİZLİLİK POLİTİKASI MODALI --- */}
       {isPrivacyOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-surface border border-slate-700 w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[80vh]">
             <div className="flex justify-between items-center p-6 border-b border-slate-800/60 bg-surface-hover rounded-t-2xl shrink-0">
               <h2 className="text-xl font-bold text-white">Gizlilik Politikası</h2>
-              <button onClick={() => setIsPrivacyOpen(false)} className="text-slate-400 hover:text-white"><X size={24} /></button>
+              <button onClick={() => setIsPrivacyOpen(false)} className="text-slate-400 hover:text-white transition-colors"><X size={24} /></button>
             </div>
-            <div className="p-6 overflow-y-auto text-sm text-slate-300 space-y-4">
-              <p>Örnek gizlilik politikası metni.</p>
+            <div className="p-6 overflow-y-auto text-sm text-slate-300 space-y-4 custom-scrollbar">
+              {SITE_CONFIG.legal.privacyPolicy.map((policy, index) => (
+                <p key={index}>{policy}</p>
+              ))}
             </div>
             <div className="p-6 border-t border-slate-800/60 bg-surface-hover rounded-b-2xl shrink-0">
-              <button onClick={() => setIsPrivacyOpen(false)} className="w-full bg-success hover:bg-success/80 text-white font-medium py-3 rounded-xl">Okudum, Kapat</button>
+              <button onClick={() => setIsPrivacyOpen(false)} className="w-full bg-success hover:bg-success/80 text-white font-medium py-3 rounded-xl transition-colors">Okudum, Kabul Ediyorum</button>
             </div>
           </div>
         </div>

@@ -2,13 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Lock, RefreshCcw, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import PublicNavbar from '@/components/PublicNavbar';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function UpdatePasswordPage() {
   const router = useRouter();

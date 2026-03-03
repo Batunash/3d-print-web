@@ -1,15 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import { CheckCircle, Clock, Send, Layers, Home, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { SITE_CONFIG } from '@/lib/constants';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 
 export default function AdminRequestsPage() {
   const router = useRouter();

@@ -2,13 +2,11 @@
 
 import React, { useState } from 'react';
 import { Mail, ArrowRight, CheckCircle2, ArrowLeft } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
 import PublicNavbar from '@/components/PublicNavbar';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');

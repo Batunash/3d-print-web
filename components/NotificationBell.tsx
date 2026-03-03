@@ -1,11 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Bell, Check, Trash2 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { Bell, Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+import { supabase } from '@/lib/supabaseClient'; // Merkezi istemci
 
 export default function NotificationBell() {
   const router = useRouter();
@@ -15,6 +13,11 @@ export default function NotificationBell() {
 
   useEffect(() => {
     fetchUserAndNotifications();
+
+    // 🛡️ MEMORY LEAK KORUMASI: Component kapandığında WebSocket dinlemeyi durdur!
+    return () => {
+      supabase.removeAllChannels();
+    };
   }, []);
 
   const fetchUserAndNotifications = async () => {
@@ -22,7 +25,6 @@ export default function NotificationBell() {
     if (user) {
       setUserId(user.id);
       
-      // İlk yüklemede bildirimleri çek
       const { data } = await supabase
         .from('notifications')
         .select('*')
@@ -32,7 +34,6 @@ export default function NotificationBell() {
       
       if (data) setNotifications(data);
 
-      // REALTIME (ANLIK) DİNLEME: Yeni bildirim geldiğinde listeye anında ekle!
       supabase
         .channel('custom-all-channel')
         .on(
@@ -63,24 +64,26 @@ export default function NotificationBell() {
 
   return (
     <div className="relative z-50">
+      {/* bg-[#1a2233] yerine bg-surface-hover yapıldı */}
       <button 
         onClick={() => setIsOpen(!isOpen)} 
-        className="relative p-2 bg-[#1a2233] hover:bg-slate-800 rounded-lg text-slate-300 transition-colors border border-slate-700/60"
+        className="relative p-2 bg-surface-hover hover:bg-slate-800 rounded-lg text-slate-300 transition-colors border border-slate-700/60"
       >
         <Bell size={20} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-lg animate-pulse">
+          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-danger text-[10px] font-bold text-white shadow-lg animate-pulse">
             {unreadCount}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-3 w-80 bg-[#121824] border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[400px]">
-          <div className="p-4 border-b border-slate-800/60 bg-[#1a2233] flex justify-between items-center">
+        // bg-[#121824] yerine bg-surface yapıldı
+        <div className="absolute right-0 mt-3 w-80 bg-surface border border-slate-700 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[400px]">
+          <div className="p-4 border-b border-slate-800/60 bg-surface-hover flex justify-between items-center">
             <h3 className="text-sm font-bold text-white">Bildirimler</h3>
             {unreadCount > 0 && (
-              <button onClick={markAllAsRead} className="text-[11px] text-blue-400 hover:text-blue-300 flex items-center gap-1">
+              <button onClick={markAllAsRead} className="text-[11px] text-primary hover:text-primary-hover flex items-center gap-1">
                 <Check size={12} /> Tümünü Okundu İşaretle
               </button>
             )}
@@ -95,11 +98,11 @@ export default function NotificationBell() {
                   <div 
                     key={notif.id} 
                     onClick={() => markAsRead(notif.id, notif.link)}
-                    className={`p-4 cursor-pointer hover:bg-[#1a2233]/50 transition-colors ${!notif.is_read ? 'bg-blue-600/5' : ''}`}
+                    className={`p-4 cursor-pointer hover:bg-surface-hover transition-colors ${!notif.is_read ? 'bg-primary/10' : ''}`}
                   >
                     <div className="flex justify-between items-start mb-1">
                       <h4 className={`text-sm ${!notif.is_read ? 'text-white font-semibold' : 'text-slate-300 font-medium'}`}>{notif.title}</h4>
-                      {!notif.is_read && <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0"></span>}
+                      {!notif.is_read && <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0"></span>}
                     </div>
                     <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">{notif.message}</p>
                     <span className="text-[10px] text-slate-500 block mt-2">

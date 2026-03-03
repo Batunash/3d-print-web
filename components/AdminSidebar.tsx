@@ -3,11 +3,10 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabaseClient';
 import { BarChart3, FileText, Layers, LogOut } from 'lucide-react';
 import { SITE_CONFIG } from '@/lib/constants'; 
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
 
 export default function AdminSidebar() {
   const pathname = usePathname();
