@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabaseClient';
 import { useRouter, useParams } from 'next/navigation';
 import { 
   ArrowLeft, DollarSign, CheckCircle, Clock, Package, 
@@ -9,8 +8,9 @@ import {
   MessageSquare, Send
 } from 'lucide-react';
 import Link from 'next/link';
-
-
+import { supabase } from '@/lib/supabaseClient';
+import { toast } from 'react-hot-toast';
+import LoadingSpinner from '@/components/LoadingSpinner';
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -87,15 +87,18 @@ export default function OrderDetailPage() {
       if (msgData) setMessages(msgData);
       
       // Admin'e bildirim çak
-      await supabase.from('notifications').insert({
-        user_id: (await supabase.from('profiles').select('id').eq('role', 'admin').single()).data?.id,
-        title: 'Müşteriden Yeni Mesaj 💬',
-        message: `"${request.title}" siparişi için müşteriden yeni bir mesaj geldi.`,
-        link: `/admin/requests/${request.id}`
-      });
+      const { data: adminProfile } = await supabase.from('profiles').select('id').eq('role', 'admin').single();
+      if (adminProfile) {
+        await supabase.from('notifications').insert({
+          user_id: adminProfile.id,
+          title: 'Müşteriden Yeni Mesaj 💬',
+          message: `"${request.title}" siparişi için müşteriden yeni bir mesaj geldi.`,
+          link: `/admin/requests/${request.id}`
+        });
+      }
       
     } catch (error: any) {
-      alert("Mesaj gönderilemedi: " + error.message);
+      toast.error("Mesaj gönderilemedi.");
     } finally {
       setSendingMsg(false);
     }
@@ -108,7 +111,7 @@ export default function OrderDetailPage() {
 
   const handleFinalApprove = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (contactPhone.length < 10) return alert("Lütfen geçerli bir telefon numarası giriniz.");
+    if (contactPhone.length < 10) return toast.error("Lütfen geçerli bir telefon numarası giriniz.");
 
     setIsProcessing(true);
     try {
@@ -125,10 +128,10 @@ export default function OrderDetailPage() {
       if (orderError) throw orderError;
 
       setIsAcceptingQuote(false);
-      alert("Harika! Siparişiniz başarıyla oluşturuldu ve üretime alındı.");
+      toast.success("Harika! Siparişiniz başarıyla oluşturuldu ve üretime alındı.");
       fetchDetail(); 
     } catch (error: any) {
-      alert("İşlem sırasında bir hata oluştu: " + error.message);
+      toast.error("İşlem sırasında bir hata oluştu: " + error.message);
     } finally {
       setIsProcessing(false);
     }
@@ -137,10 +140,12 @@ export default function OrderDetailPage() {
   const handleCancelRequest = async () => {
     if (!window.confirm('Bu talebi iptal etmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
     try {
-      await supabase.from('print_requests').delete().eq('id', request.id);
+      const { error } = await supabase.from('print_requests').delete().eq('id', request.id);
+      if (error) throw error;
+      toast.success("Talebiniz iptal edildi.");
       router.push('/dashboard/orders');
     } catch (error: any) {
-      alert("Hata: " + error.message);
+      toast.error("İptal edilemedi: " + error.message);
     }
   };
 
@@ -157,12 +162,7 @@ export default function OrderDetailPage() {
     return badges[status] || <span>{status}</span>;
   };
 
-  if (loading) return (
-    <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
-      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      <p>Sipariş detayları yükleniyor...</p>
-    </div>
-  );
+  if (loading) return <LoadingSpinner message="Sipariş detayları yükleniyor..." />;
 
   if (!request) return (
     <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
@@ -219,7 +219,7 @@ export default function OrderDetailPage() {
               <div className="flex items-center gap-4 bg-background p-4 rounded-xl border border-slate-800">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center"><Package size={24} className="text-primary" /></div>
                 <div className="flex-1 overflow-hidden">
-                  <p className="text-white font-medium truncate">{request.files?.filename || "model_dosyasi.stl"}</p>
+                  <p className="text-white font-medium truncate">{request.files?.[0]?.filename || "model_dosyasi.stl"}</p>
                   <p className="text-xs text-slate-500 uppercase">Hazır - STL / OBJ</p>
                 </div>
               </div>

@@ -5,7 +5,7 @@ import { Lock, RefreshCcw, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 import { useRouter } from 'next/navigation';
 import PublicNavbar from '@/components/PublicNavbar';
-
+import { toast } from 'react-hot-toast'; // YENİ EKLENDİ
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -49,7 +49,8 @@ export default function UpdatePasswordPage() {
       setError("Şifre güncellenirken hata oluştu: " + updateError.message);
       setLoading(false);
     } else {
-      alert("Şifreniz başarıyla güncellendi! Yönlendiriliyorsunuz...");
+      // YENİ: alert yerine toast kullanıyoruz
+      toast.success("Şifreniz başarıyla güncellendi! Yönlendiriliyorsunuz...");
       
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {

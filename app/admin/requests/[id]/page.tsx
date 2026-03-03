@@ -9,7 +9,8 @@ import {
   MessageSquare, Send, Download, Truck, Layers
 } from 'lucide-react';
 import Link from 'next/link';
-
+import { toast } from 'react-hot-toast'; // YENİ EKLENDİ
+import LoadingSpinner from '@/components/LoadingSpinner'; // YENİ EKLENDİ
 
 export default function AdminOrderDetailPage() {
   const router = useRouter();
@@ -94,7 +95,7 @@ export default function AdminOrderDetailPage() {
       setNewMessage('');
       fetchMessages();
     } catch (error: any) {
-      alert("Mesaj gönderilemedi: " + error.message);
+      toast.error("Mesaj gönderilemedi.");
     } finally {
       setSendingMsg(false);
     }
@@ -103,7 +104,7 @@ export default function AdminOrderDetailPage() {
   const handleQuoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!request || !adminId) return;
-    if (parseFloat(price) < 0) return alert("Fiyat 0'dan küçük olamaz!");
+    if (parseFloat(price) < 0) return toast.error("Fiyat 0'dan küçük olamaz!");
 
     setIsSubmittingQuote(true);
     try {
@@ -134,9 +135,10 @@ export default function AdminOrderDetailPage() {
         });
       } catch (mailErr) { console.error("Mail hatası", mailErr); }
       
+      toast.success("Teklif müşteriye başarıyla iletildi!");
       fetchDetail();
     } catch (error: any) {
-      alert("Teklif oluşturulurken hata: " + error.message);
+      toast.error("Teklif oluşturulamadı.");
     } finally {
       setIsSubmittingQuote(false);
     }
@@ -158,8 +160,12 @@ export default function AdminOrderDetailPage() {
           message: `"${request.title}" projeniz ${durumMesaji}`, link: `/dashboard/orders/${request.id}`
         });
       }
+      
+      toast.success("Sipariş durumu güncellendi!");
       fetchDetail();
-    } catch (err: any) { alert("Durum güncellenirken hata: " + err.message); }
+    } catch (err: any) { 
+      toast.error("Durum güncellenirken hata oluştu."); 
+    }
   };
 
   const downloadFile = async (storagePath: string) => {
@@ -170,7 +176,9 @@ export default function AdminOrderDetailPage() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       window.open(data.signedUrl, '_blank');
-    } catch (err: any) { alert("Dosya indirilemedi: " + err.message); }
+    } catch (err: any) { 
+      toast.error("Dosya indirilemedi: " + err.message); 
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -185,12 +193,7 @@ export default function AdminOrderDetailPage() {
     return badges[status] || <span className="text-slate-400">{status}</span>;
   };
 
-  if (loading) return (
-    <div className="flex-1 flex flex-col items-center justify-center text-slate-400 gap-4">
-      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-      <p>Sipariş detayları yükleniyor...</p>
-    </div>
-  );
+  if (loading) return <LoadingSpinner message="Sipariş detayları yükleniyor..." />;
 
   if (!request) return (
     <div className="flex-1 flex flex-col items-center justify-center text-slate-400">

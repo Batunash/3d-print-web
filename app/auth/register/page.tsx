@@ -29,12 +29,19 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
+      // 1. DÜZELTME: İsim bilgisini (fullname) meta_data olarak gönderiyoruz ki SQL Trigger yakalayabilsin.
+      const { data: authData, error: authError } = await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          data: { full_name: fullname }
+        }
+      });
+      
       if (authError) throw authError;
 
-      if (authData.user) {
-        await supabase.from('profiles').insert({ id: authData.user.id, full_name: fullname, role: 'customer' });
-      }
+      // 2. SİLİNEN KISIM: Eskiden burada profiles tablosuna insert atıyorduk.
+      // Artık Supabase Trigger'ı bunu arka planda milisaniyeler içinde kusursuzca yapıyor!
 
       if (authData.session) {
         document.cookie = `sb-access-token=${authData.session.access_token}; path=/; max-age=604800;`;
@@ -48,21 +55,6 @@ export default function RegisterPage() {
       setLoading(false); 
     }
   };
-
-  // BAŞARILI KAYIT / E-POSTA DOĞRULAMA EKRANI
-  if (isSuccess) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-6 text-center font-sans">
-      <div className="w-20 h-20 bg-success/10 rounded-full flex items-center justify-center mb-6 border border-success/20">
-        <Mail size={40} className="text-success" />
-      </div>
-      <h1 className="text-3xl font-bold text-white mb-4">E-postanızı Kontrol Edin</h1>
-      <p className="text-slate-400 max-w-md mb-8"><b>{email}</b> adresine bir doğrulama bağlantısı gönderdik.</p>
-      <Link href="/auth/login" className="bg-primary hover:bg-primary-hover text-white px-8 py-3 rounded-lg font-medium transition-colors">
-        Giriş Yap
-      </Link>
-    </div>
-  );
-
   // NORMAL KAYIT EKRANI
   return (
     <div className="min-h-screen flex flex-col bg-background text-slate-200 font-sans selection:bg-primary/30">
